@@ -1,19 +1,26 @@
 # file: ComfyUI/custom_nodes/ComfyUI-RemacriScale/remacri_node.py
 
-# Import ONNX Runtime, which is the engine used to load and run ONNX models.
+# ---------------------------------------------------------------------------
+# Import dependencies
+# ---------------------------------------------------------------------------
+
+# ONNX Runtime is the inference engine used to run ONNX models.
 # It supports multiple execution providers (CPU, CUDA, TensorRT).
 import onnxruntime as ort
 
-# Import NumPy for numerical array manipulation. We use it to reshape and normalize images.
+# NumPy is used for numerical array manipulation.
+# We rely on it to reshape, normalize, and stack image data.
 import numpy as np
 
-# Import os for filesystem operations (checking directories, building paths).
+# os is used for filesystem operations such as checking directories and building paths.
 import os
 
-# Import OpenCV for image resizing. After upscaling, we can optionally downscale to HD/FHD.
+# OpenCV (cv2) is used for image resizing.
+# After upscaling, we can optionally downscale to HD/FHD resolutions.
 import cv2
 
-# Import PyTorch because ComfyUI expects images to be torch.FloatTensor objects.
+# PyTorch is imported because ComfyUI expects images to be torch.FloatTensor objects.
+# This ensures compatibility with the rest of the pipeline.
 import torch
 
 
@@ -21,14 +28,17 @@ class RemacriOnnxUpscaleNode:
     """
     Custom ComfyUI node for image upscaling using ONNX models.
 
-    Features:
+    Key features:
     - Dropdown for selecting ONNX model from models/upscale_models/ folder.
     - Dropdown for selecting execution provider (TensorRT, CUDA, CPU).
     - Optional downscale to HD (1280x720) or FHD (1920x1080).
     - Reports progress (0–100%) back to ComfyUI during batch processing.
     """
 
-    # Class-level cache variables to avoid reloading the model every time.
+    # -----------------------------------------------------------------------
+    # Class-level cache variables
+    # -----------------------------------------------------------------------
+    # These are used to avoid reloading the ONNX model session every time.
     _session = None       # Cached ONNX Runtime session.
     _model_path = None    # Path of the currently loaded model.
     _provider = None      # Name of the currently selected provider.
@@ -38,9 +48,10 @@ class RemacriOnnxUpscaleNode:
         """
         Defines the inputs that appear in ComfyUI's interface.
 
-        - Scans models/upscale_models/ for .onnx files and lists them in a dropdown.
-        - Provides a dropdown for execution provider selection.
-        - Provides a dropdown for final resolution selection.
+        Steps:
+        - Scan models/upscale_models/ for .onnx files and list them in a dropdown.
+        - Provide a dropdown for execution provider selection.
+        - Provide a dropdown for final resolution selection.
         """
 
         # Path to the model directory.
@@ -56,7 +67,7 @@ class RemacriOnnxUpscaleNode:
             files = ["(no .onnx models found)"]
 
         # Available execution providers for the dropdown.
-        providers = ["TensorrtExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"]
+        providers = ["TensorRTExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"]
 
         # Return the input specification dictionary for ComfyUI.
         return {
@@ -68,17 +79,23 @@ class RemacriOnnxUpscaleNode:
             }
         }
 
-    # Define output types and names for ComfyUI.
+    # -----------------------------------------------------------------------
+    # Output specification
+    # -----------------------------------------------------------------------
     RETURN_TYPES = ("IMAGE",)       # Output is an image.
     RETURN_NAMES = ("upsampled",)   # Label for the output.
     FUNCTION = "upscale"            # Function executed when node runs.
     CATEGORY = "image/upscale"      # Category in ComfyUI's node menu.
+
+    # This flag tells ComfyUI that the node can report progress.
+    OUTPUT_NODE = True
 
     @classmethod
     def _load_session(cls, model_path, provider):
         """
         Loads or reuses an ONNX Runtime session.
 
+        Logic:
         - If no session is cached, or if the model/provider changed, create a new session.
         - Cache the session, model path, and provider for reuse.
         - Print which provider is being used for debugging.
@@ -132,7 +149,7 @@ class RemacriOnnxUpscaleNode:
             arr = (image[i].cpu().numpy() * 255).astype(np.uint8)
 
             # Rearrange dimensions from HWC to NCHW, add batch dimension, normalize to 0–1 float32.
-            inp = arr.transpose(2,0,1)[None].astype(np.float32) / 255.0
+            inp = arr.transpose(2, 0, 1)[None].astype(np.float32) / 255.0
 
             # Prepare ONNX Runtime input dictionary.
             ort_inputs = {session.get_inputs()[0].name: inp}
@@ -141,7 +158,7 @@ class RemacriOnnxUpscaleNode:
             ort_outs = session.run(None, ort_inputs)
 
             # Convert output back from NCHW to HWC format.
-            out = ort_outs[0][0].transpose(1,2,0)
+            out = ort_outs[0][0].transpose(1, 2, 0)
 
             # Optional downscale step.
             if final_resolution == "hd":
@@ -154,8 +171,9 @@ class RemacriOnnxUpscaleNode:
 
             # Report progress to ComfyUI (if callback provided).
             if progress is not None:
-                percent = int(((i+1)/total)*100)
-                progress(percent)
+                percent = int(((i + 1) / total) * 100)
+                progress(percent)  # This updates the UI progress bar.
+                print(f"[RemacriOnnxUpscale] Progress: {percent}%")  # Console log for debugging.
 
         # Stack all processed images into one NumPy array.
         out = np.stack(out_batch, axis=0).astype(np.float32)
