@@ -160,7 +160,7 @@ class RemacriOnnxUpscaleNode:
             total=100,
             desc=f"Upscaling (Image 1/{total})",
             ncols=100,
-            colour="green",
+            colour="blue",
             dynamic_ncols=True,
             bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
         )
