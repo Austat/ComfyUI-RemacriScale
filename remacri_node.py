@@ -23,6 +23,9 @@ import cv2
 # This ensures compatibility with the rest of the pipeline.
 import torch
 
+import folder_paths
+from tqdm import tqdm
+
 
 class RemacriOnnxUpscaleNode:
     """
@@ -55,8 +58,8 @@ class RemacriOnnxUpscaleNode:
         """
 
         # Path to the model directory.
-        model_dir = os.path.join("models", "upscale_models")
-
+        model_dir = folder_paths.get_folder_paths("upscale_models")[0]
+        
         # Collect all .onnx files in the directory.
         files = []
         if os.path.isdir(model_dir):
@@ -67,7 +70,7 @@ class RemacriOnnxUpscaleNode:
             files = ["(no .onnx models found)"]
 
         # Available execution providers for the dropdown.
-        providers = ["TensorRTExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"]
+        providers = ["TensorrtExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"]
 
         # Return the input specification dictionary for ComfyUI.
         return {
@@ -75,7 +78,7 @@ class RemacriOnnxUpscaleNode:
                 "image": ("IMAGE",),                # Input image tensor.
                 "model_file": (files,),             # Dropdown list of ONNX models.
                 "provider": (providers,),           # Dropdown list of providers.
-                "final_resolution": (["none", "hd", "fhd"],),  # Dropdown for optional downscale.
+                "final_resolution": (["hd", "fhd", "no downscaling"],),  # Dropdown for optional downscale.
             }
         }
 
@@ -107,8 +110,9 @@ class RemacriOnnxUpscaleNode:
             cls._provider = provider
             print(f"[RemacriOnnxUpscale] Using provider: {provider}")
         return cls._session
-
+        
     def upscale(self, image, model_file, provider, final_resolution, progress=None):
+        
         """
         Main execution function.
 
@@ -127,8 +131,16 @@ class RemacriOnnxUpscaleNode:
         5. Stack outputs, convert to torch.FloatTensor, and return.
         """
 
+        # Get correct model directory from ComfyUI model paths
+        model_dir = folder_paths.get_folder_paths("upscale_models")[0]
+
+        # Ensure batch dimension exists
+        if image.dim() == 3:
+            print("[RemacriOnnxUpscale] Single image detected, converting to batch of size 1")
+            image = image.unsqueeze(0)
+
         # Construct full path to the model file.
-        model_path = os.path.join("models", "upscale_models", model_file)
+        model_path = os.path.join(model_dir, model_file)
 
         # Ensure the model file exists.
         if not os.path.exists(model_path):
@@ -143,8 +155,20 @@ class RemacriOnnxUpscaleNode:
         # Total number of images in batch.
         total = image.shape[0]
 
-        # Process each image in the batch.
+         # Create tqdm progress bar
+        pbar = tqdm(
+            total=100,
+            desc=f"Upscaling (Image 1/{total})",
+            ncols=100,
+            colour="green",
+            dynamic_ncols=True,
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
+        )
+
+        percent = 0
+
         for i in range(total):
+
             # Convert torch tensor to NumPy array in uint8 format (0–255).
             arr = (image[i].cpu().numpy() * 255).astype(np.uint8)
 
@@ -166,14 +190,27 @@ class RemacriOnnxUpscaleNode:
             elif final_resolution == "fhd":
                 out = cv2.resize(out, (1920, 1080), interpolation=cv2.INTER_AREA)
 
-            # Append processed image to batch.
+            # Sanitize output
+            out = np.nan_to_num(out, nan=0.0, posinf=1.0, neginf=0.0)
+            out = np.clip(out, 0.0, 1.0)
+
             out_batch.append(out)
 
-            # Report progress to ComfyUI (if callback provided).
+            # Calculate percent
+            percent = int(((i + 1) / total) * 100)
+
+            # Update ComfyUI UI progress
             if progress is not None:
-                percent = int(((i + 1) / total) * 100)
-                progress(percent)  # This updates the UI progress bar.
-                print(f"[RemacriOnnxUpscale] Progress: {percent}%")  # Console log for debugging.
+                progress(percent)
+
+            # Update tqdm console progress
+            pbar.update(percent - pbar.n)
+
+            # Update description with current image number
+            pbar.set_description(f"Upscaling (Image {i+1}/{total})")
+
+        pbar.close()
+
 
         # Stack all processed images into one NumPy array.
         out = np.stack(out_batch, axis=0).astype(np.float32)
