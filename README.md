@@ -9,4 +9,7 @@ Method 1: Clone the Repository Navigate to your ComfyUI custom_nodes directory. 
 
 git clone https://github.com/Austat/ComfyUI-RemacriScale
 
+cd ComfyUI-RemacriScale
+pip install -r requirements.txt
+
 Restart ComfyUI.
