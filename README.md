@@ -1,7 +1,8 @@
 # ComfyUI-RemacriScale
 Using Remacri upscaler, upscale a video and then downscale.
 
-<img width="353" height="472" alt="image" src="https://github.com/user-attachments/assets/c322c23d-2596-407b-8cca-0c59cf5f91cd" />
+<img width="315" height="128" alt="image" src="https://github.com/user-attachments/assets/8d4fc74a-b646-4094-b2d7-3214f261f50e" />
+
 
 Installation
 
@@ -12,5 +13,7 @@ git clone https://github.com/Austat/ComfyUI-RemacriScale
 cd ComfyUI-RemacriScale
 
 pip install -r requirements.txt
+
+Download needed onnx - files to your ComfyUI or custom models/upscale_models/ - folder.
 
 Restart ComfyUI.
