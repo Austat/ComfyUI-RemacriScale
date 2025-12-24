@@ -56,11 +56,57 @@ class RemacriOnnxUpscaleNode:
     @classmethod
     def _load_session(cls, model_path, provider):
 
+        # Sama logiikka kuin alkuperäisessä: sessio cachetaan mallin ja provideriin mukaan
         if cls._session is None or cls._model_path != model_path or cls._provider != provider:
-            cls._session = ort.InferenceSession(model_path, providers=[provider])
+            so = ort.SessionOptions()
+            so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+
+            providers = [provider]
+
+            # TensorRT-optimit, mutta vain sessiota luodessa
+            if provider == "TensorrtExecutionProvider":
+                trt_options = {
+                    # Engine cache levylle
+                    "trt_engine_cache_enable": True,
+                    "trt_engine_cache_path": "./trt_engine_cache",
+
+                    # Timing cache optimointia varten
+                    "trt_timing_cache_enable": True,
+                    "trt_timing_cache_path": "./trt_timing_cache",
+
+                    # Käytä FP16:ta (usein selvästi nopeampi)
+                    "trt_fp16_enable": True,
+
+                    # INT8 pois oletuksena (vaatii kalibroinnin)
+                    "trt_int8_enable": False,
+
+                    # DLA pois (ellei Jetson tms.)
+                    "trt_dla_enable": False,
+                    "trt_dla_core": 0,
+
+                    # Rajoita workspace-muistia, ettei yritä varata satoja gigoja
+                    "trt_max_workspace_size": 2 * 1024 * 1024 * 1024,
+                }
+
+                providers = [
+                    ("TensorrtExecutionProvider", trt_options),
+                    "CUDAExecutionProvider",
+                ]
+
+            cls._session = ort.InferenceSession(
+                model_path,
+                sess_options=so,
+                providers=providers
+            )
+
             cls._model_path = model_path
             cls._provider = provider
-            print(f"[RemacriOnnxUpscale] Using provider: {provider}")
+
+            actual_providers = cls._session.get_providers()
+            print(f"[RemacriOnnxUpscale] Requested provider: {provider}")
+            print(f"[RemacriOnnxUpscale] Actual providers in use: {actual_providers}")
+            if provider == "TensorrtExecutionProvider":
+                print("[RemacriOnnxUpscale] TensorRT: engine+timing cache enabled, FP16 enabled, INT8 disabled.")
 
         return cls._session
 
@@ -102,6 +148,7 @@ class RemacriOnnxUpscaleNode:
 
         for i in range(total):
 
+            # TÄMÄ BLOKKI ON IDENTTINEN ALKUPERÄISEN KANSSA
             arr = (image[i].cpu().numpy() * 255).astype(np.uint8)
             inp = arr.transpose(2, 0, 1)[None].astype(np.float32) / 255.0
 
