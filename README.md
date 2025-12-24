@@ -1,5 +1,5 @@
 # ComfyUI-RemacriScale
-Using Remacri upscaler, upscale a video and then downscale.
+Using Remacri upscaler, upscale a video using one of three providers supported by onnx and then downscale.
 
 Supported methods are:
 
