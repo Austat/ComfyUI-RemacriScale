@@ -34,7 +34,7 @@ Supported methods are:
             "CPUExecutionProvider"
 
 <details>
-  <summary>Details about TensorRT timing cache and engine aka tactic timing data</summary>
+  <summary>Details about TensorRT timing cache and engine (aka tactic timing data)</summary>
 
 ## What the TensorRT timing cache is
 * The timing cache is a small binary file that stores tactic timing data — basically, TensorRT’s internal measurements of which GPU kernels are fastest for each layer of your model.
