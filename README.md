@@ -24,5 +24,5 @@ Download needed onnx - files to your ComfyUI or custom models/upscale_models/ - 
 
 Restart ComfyUI.
 
-First upscaling run will take longer time as each used resolution needs it's own TensorRT engine. Subsident runs are considerably faster as they use the previously created timing cache.
+First upscaling run will take longer time as each used resolution needs it's own TensorRT engine. Runs after that one are considerably faster as they use the previously created timing cache.
 
