@@ -27,7 +27,7 @@ Restart ComfyUI.
 First upscaling run will take longer time as each used resolution needs it's own TensorRT engine. Consequent runs after that are considerably faster, as they use the previously created timing cache.
 
 <details>
-  <summary>Details about TensorRT timing cache and engine</summary>
+  <summary>Details about TensorRT timing cache and engine aka tactic timing data</summary>
 
 ## What the TensorRT timing cache is
 * The timing cache is a small binary file that stores tactic timing data — basically, TensorRT’s internal measurements of which GPU kernels are fastest for each layer of your model.
