@@ -1,5 +1,5 @@
 # ComfyUI-RemacriScale
-Using Remacri upscaler, upscale a video and then downscale.
+Using Remacri upscaler, upscale a video using one of three providers supported by onnx and then downscale.
 
 <img width="315" height="128" alt="image" src="https://github.com/user-attachments/assets/8d4fc74a-b646-4094-b2d7-3214f261f50e" />
 
@@ -95,3 +95,5 @@ Without a timing cache:
 * TensorRT becomes much more stable
 
 * repeated runs at the same resolution are nearly instant
+First upscaling run will take longer time as each used resolution needs it's own TensorRT engine. Runs after that one are considerably faster as they use the previously created timing cache.
+
