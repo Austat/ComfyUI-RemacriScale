@@ -1,12 +1,6 @@
 # ComfyUI-RemacriScale
 Using Remacri upscaler, upscale a video and then downscale.
 
-Supported methods are:
-
-           "TensorrtExecutionProvider",
-            "CUDAExecutionProvider",
-            "CPUExecutionProvider"
-
 <img width="315" height="128" alt="image" src="https://github.com/user-attachments/assets/8d4fc74a-b646-4094-b2d7-3214f261f50e" />
 
 
