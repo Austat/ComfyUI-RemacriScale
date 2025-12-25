@@ -94,6 +94,5 @@ Without a timing cache:
 
 * TensorRT becomes much more stable
 
-* repeated runs at the same resolution are nearly instant
-First upscaling run will take longer time as each used resolution needs it's own TensorRT engine. Runs after that one are considerably faster as they use the previously created timing cache.
+* Repeated runs at the same resolution are nearly instant First upscaling run will take longer time as each used resolution needs it's own TensorRT engine. Runs after that one are considerably faster as they use the previously created timing cache.
 
