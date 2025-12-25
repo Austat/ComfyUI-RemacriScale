@@ -26,6 +26,13 @@ Restart ComfyUI.
 
 First upscaling run will take longer time as each used resolution needs it's own TensorRT engine. Consequent runs after that are considerably faster, as they use the previously created timing cache.
 
+Supported methods are:
+
+           "TensorrtExecutionProvider",
+            "CUDAExecutionProvider",
+            "ROCmExecutionProvider",
+            "CPUExecutionProvider"
+
 <details>
   <summary>Details about TensorRT timing cache and engine aka tactic timing data</summary>
 
