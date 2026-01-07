@@ -6,6 +6,7 @@ import os
 import cv2
 import torch
 import folder_paths
+import shutil
 from tqdm import tqdm
 import time  # used for timing TensorRT cache and engine build durations
 
@@ -39,12 +40,80 @@ class RemacriOnnxUpscaleNode:
         • Reuses ONNX Runtime sessions efficiently
         • Produces stable, high‑quality results
     """
+    
+    TORCH_VERSION_FILE = "./trt_cache_metadata/last_torch_version.txt"
 
     # Cached session and metadata (shared across calls)
     _session = None
     _model_path = None
     _provider = None
     _timing_cache_path = None
+
+    @classmethod
+    def _check_runtime_versions_and_invalidate_cache(cls, timing_cache_path):
+        """
+        Detects changes in:
+            • Torch version
+            • CUDA version
+            • ONNX Runtime version
+
+        If any changed → delete TensorRT timing cache + engine cache.
+        """
+
+        current = {
+            "torch": torch.__version__,
+            "cuda": torch.version.cuda,
+            "onnxruntime": ort.__version__,
+        }
+
+        # Ensure metadata directory exists
+        meta_dir = os.path.dirname(cls.TORCH_VERSION_FILE)
+        if meta_dir and not os.path.exists(meta_dir):
+            os.makedirs(meta_dir, exist_ok=True)
+
+        # Load previous metadata
+        previous = None
+        if os.path.exists(cls.TORCH_VERSION_FILE):
+            try:
+                with open(cls.TORCH_VERSION_FILE, "r") as f:
+                    import json
+                    previous = json.load(f)
+            except:
+                previous = None
+
+        # If anything changed → invalidate caches
+        if previous != current:
+            print("[RemacriOnnxUpscale] Runtime versions changed:")
+            print(f"  Torch:        {previous.get('torch') if previous else None} → {current['torch']}")
+            print(f"  CUDA:         {previous.get('cuda') if previous else None} → {current['cuda']}")
+            print(f"  ONNXRuntime:  {previous.get('onnxruntime') if previous else None} → {current['onnxruntime']}")
+            print("[RemacriOnnxUpscale] Invalidating TensorRT timing + engine caches...")
+
+            # Delete timing cache file
+            if os.path.exists(timing_cache_path):
+                try:
+                    os.remove(timing_cache_path)
+                    print(f"[RemacriOnnxUpscale] Deleted timing cache: {timing_cache_path}")
+                except Exception as e:
+                    print(f"[RemacriOnnxUpscale] Failed to delete timing cache: {e}")
+
+            # Delete engine cache directory
+            engine_cache_dir = "./trt_engine_cache"
+            if os.path.exists(engine_cache_dir):
+                try:
+                    shutil.rmtree(engine_cache_dir)
+                    print(f"[RemacriOnnxUpscale] Deleted engine cache directory: {engine_cache_dir}")
+                except Exception as e:
+                    print(f"[RemacriOnnxUpscale] Failed to delete engine cache directory: {e}")
+
+            # Save new metadata
+            try:
+                with open(cls.TORCH_VERSION_FILE, "w") as f:
+                    import json
+                    json.dump(current, f)
+            except Exception as e:
+                print(f"[RemacriOnnxUpscale] Failed to write version metadata: {e}")
+
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -344,21 +413,24 @@ class RemacriOnnxUpscaleNode:
         if model_path is None:
             raise FileNotFoundError(f"Model '{model_file}' not found.")
 
-        # 2. Ensure batch dimension [B, H, W, C]
+        # 2. Ensure batch dimension
         if image.dim() == 3:
             image = image.unsqueeze(0)
 
-        # 3. Determine input resolution (H×W)
+        # 3. Determine input resolution
         _, H, W, _ = image.shape
 
-        # 4. Build resolution‑specific TensorRT timing‑cache path
-        #    Example: ./trt_timing_cache/trt_timing_cache_720x1280.bin
+        # 4. Build timing cache path
         timing_cache_dir = "./trt_timing_cache"
         timing_cache_filename = f"trt_timing_cache_{H}x{W}.bin"
         timing_cache_path = os.path.join(timing_cache_dir, timing_cache_filename)
 
-        # 5. Load ONNX Runtime session (with fallback logic)
+        # 5. Invalidate TRT caches if torch version changed
+        self._check_runtime_versions_and_invalidate_cache(timing_cache_path)
+
+        # 6. Load ONNX Runtime session (this is the missing line!)
         session = self._load_session(model_path, provider, timing_cache_path)
+
 
         # Prepare output list and progress bar
         out_batch = []
