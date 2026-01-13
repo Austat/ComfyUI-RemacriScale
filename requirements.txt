@@ -1,6 +1,5 @@
-onnxruntime
-numpy
-opencv-python
-torch
-folder_paths
+onnxruntime-gpu
+numpy 
+opencv-python 
+torch 
 tqdm
