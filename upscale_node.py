@@ -216,6 +216,12 @@ class RemacriOnnxUpscaleNode:
         try:
             # Create ONNX Runtime session options
             so = ort.SessionOptions()
+
+            # Max out CPU threads
+            cpu_threads = os.cpu_count() or 8
+            so.intra_op_num_threads = cpu_threads
+            so.inter_op_num_threads = cpu_threads
+
             so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
             # Provider list for ORT
