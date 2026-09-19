@@ -6,7 +6,9 @@ Using Remacri upscaler, upscale a video using one of three providers supported b
 
 Installation
 
-Method 1: Clone the Repository Navigate to your ComfyUI custom_nodes directory. Run:
+Method 1: Clone the Repository Navigate to your ComfyUI custom_nodes directory. TensorRT based upscaling needs nVidias NVIDIA TensorRT 10.x. You can get it from here: https://developer.nvidia.com/tensorrt/download/10x
+
+Run:
 
 git clone https://github.com/Austat/ComfyUI-RemacriScale
 
