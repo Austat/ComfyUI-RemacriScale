@@ -1,162 +1,98 @@
 # file: ComfyUI/custom_nodes/ComfyUI-RemacriScale/remacri_node.py
 
-import onnxruntime as ort
-import numpy as np
+import json
 import os
-import cv2
-import torch
-import folder_paths
 import shutil
+import time
+
+import cv2
+import numpy as np
+import onnxruntime as ort
+import torch
 from tqdm import tqdm
-import time  # used for timing TensorRT cache and engine build durations
+
+import folder_paths
 
 
 class RemacriOnnxUpscaleNode:
-    """
-    Custom ComfyUI node for ONNX-based image upscaling.
+    """ONNX-based ComfyUI upscaler with true batched inference."""
 
-    ────────────────────────────────────────────────────────────────────────────────
-    HIGH‑LEVEL PURPOSE
-    ────────────────────────────────────────────────────────────────────────────────
-    This node loads an ONNX upscaling model (e.g., Remacri) and performs image
-    upscaling inside ComfyUI. It supports multiple hardware backends:
+    RUNTIME_VERSION_FILE = "./trt_cache_metadata/runtime_versions.json"
 
-        • NVIDIA TensorRT (fastest, but strict about VRAM and input shapes)
-        • NVIDIA CUDA (stable and fast)
-        • AMD ROCm (for Radeon GPUs)
-        • CPU (fallback that always works)
-
-    The node includes:
-        • Resolution‑specific TensorRT timing cache
-        • Automatic fallback logic (TRT → CUDA → ROCm → CPU)
-        • VRAM‑monitoring to avoid TensorRT crashes on low memory
-        • Timing of TensorRT timing‑cache and engine‑cache builds
-        • Support for HD, FHD, 2K, 4K, 8K output resolutions
-        • Detailed comments explaining every important step
-
-    The goal is to provide a robust, GPU‑agnostic upscale node that:
-        • Works on NVIDIA, AMD and CPU systems
-        • Avoids TensorRT failures on low VRAM
-        • Reuses ONNX Runtime sessions efficiently
-        • Produces stable, high‑quality results
-    """
-    
-    TORCH_VERSION_FILE = "./trt_cache_metadata/last_torch_version.txt"
-
-    # Cached session and metadata (shared across calls)
     _session = None
-    _model_path = None
-    _provider = None
-    _timing_cache_path = None
+    _session_key = None
+    _active_provider = None
 
     @classmethod
-    def _check_runtime_versions_and_invalidate_cache(cls, timing_cache_path):
-        """
-        Detects changes in:
-            • Torch version
-            • CUDA version
-            • ONNX Runtime version
-
-        If any changed → delete TensorRT timing cache + engine cache.
-        """
-
+    def _check_runtime_versions_and_invalidate_cache(cls):
         current = {
             "torch": torch.__version__,
             "cuda": torch.version.cuda,
             "onnxruntime": ort.__version__,
         }
 
-        # Ensure metadata directory exists
-        meta_dir = os.path.dirname(cls.TORCH_VERSION_FILE)
-        if meta_dir and not os.path.exists(meta_dir):
-            os.makedirs(meta_dir, exist_ok=True)
+        metadata_dir = os.path.dirname(cls.RUNTIME_VERSION_FILE)
+        if metadata_dir:
+            os.makedirs(metadata_dir, exist_ok=True)
 
-        # Load previous metadata
         previous = None
-        if os.path.exists(cls.TORCH_VERSION_FILE):
+        if os.path.exists(cls.RUNTIME_VERSION_FILE):
             try:
-                with open(cls.TORCH_VERSION_FILE, "r") as f:
-                    import json
-                    previous = json.load(f)
-            except:
+                with open(cls.RUNTIME_VERSION_FILE, "r", encoding="utf-8") as handle:
+                    previous = json.load(handle)
+            except (OSError, ValueError, TypeError):
                 previous = None
 
-        # If anything changed → invalidate caches
-        if previous != current:
-            print("[RemacriOnnxUpscale] Runtime versions changed:")
-            print(f"  Torch:        {previous.get('torch') if previous else None} → {current['torch']}")
-            print(f"  CUDA:         {previous.get('cuda') if previous else None} → {current['cuda']}")
-            print(f"  ONNXRuntime:  {previous.get('onnxruntime') if previous else None} → {current['onnxruntime']}")
-            print("[RemacriOnnxUpscale] Invalidating TensorRT timing + engine caches...")
+        if previous == current:
+            return
 
-            # Delete timing cache file
-            if os.path.exists(timing_cache_path):
+        print("[RemacriOnnxUpscale] Runtime versions changed.")
+        print(f"  Torch:       {previous.get('torch') if previous else None} -> {current['torch']}")
+        print(f"  CUDA:        {previous.get('cuda') if previous else None} -> {current['cuda']}")
+        print(
+            "  ONNX Runtime: "
+            f"{previous.get('onnxruntime') if previous else None} -> {current['onnxruntime']}"
+        )
+        print("[RemacriOnnxUpscale] Invalidating TensorRT caches...")
+
+        for cache_path in ("./trt_timing_cache", "./trt_engine_cache"):
+            if os.path.isdir(cache_path):
                 try:
-                    os.remove(timing_cache_path)
-                    print(f"[RemacriOnnxUpscale] Deleted timing cache: {timing_cache_path}")
-                except Exception as e:
-                    print(f"[RemacriOnnxUpscale] Failed to delete timing cache: {e}")
+                    shutil.rmtree(cache_path)
+                    print(f"[RemacriOnnxUpscale] Deleted cache directory: {cache_path}")
+                except OSError as exc:
+                    print(f"[RemacriOnnxUpscale] Failed to delete {cache_path}: {exc}")
 
-            # Delete engine cache directory
-            engine_cache_dir = "./trt_engine_cache"
-            if os.path.exists(engine_cache_dir):
-                try:
-                    shutil.rmtree(engine_cache_dir)
-                    print(f"[RemacriOnnxUpscale] Deleted engine cache directory: {engine_cache_dir}")
-                except Exception as e:
-                    print(f"[RemacriOnnxUpscale] Failed to delete engine cache directory: {e}")
+        try:
+            with open(cls.RUNTIME_VERSION_FILE, "w", encoding="utf-8") as handle:
+                json.dump(current, handle, indent=2)
+        except OSError as exc:
+            print(f"[RemacriOnnxUpscale] Failed to write runtime metadata: {exc}")
 
-            # Save new metadata
-            try:
-                with open(cls.TORCH_VERSION_FILE, "w") as f:
-                    import json
-                    json.dump(current, f)
-            except Exception as e:
-                print(f"[RemacriOnnxUpscale] Failed to write version metadata: {e}")
-
+        cls._session = None
+        cls._session_key = None
+        cls._active_provider = None
 
     @classmethod
     def INPUT_TYPES(cls):
-        """
-        Defines the UI inputs for this node.
-
-        ComfyUI inspects this dictionary to build the node interface. Each key in
-        "required" becomes a visible input field. The tuple values define allowed
-        types or dropdown options.
-        """
-
-        # Collect all ONNX models from all configured upscale model directories
         files = []
-        for d in folder_paths.get_folder_paths("upscale_models"):
-            if os.path.isdir(d):
-                for f in os.listdir(d):
-                    if f.lower().endswith(".onnx") and f not in files:
-                        files.append(f)
+        for directory in folder_paths.get_folder_paths("upscale_models"):
+            if os.path.isdir(directory):
+                for filename in os.listdir(directory):
+                    if filename.lower().endswith(".onnx") and filename not in files:
+                        files.append(filename)
 
-        # If no models found, show placeholder
+        files.sort()
         if not files:
             files = ["(no .onnx models found)"]
 
-        # Supported execution providers:
-        # NVIDIA: TensorRT, CUDA
-        # AMD: ROCm
-        # CPU: always available
         providers = [
             "TensorrtExecutionProvider",
             "CUDAExecutionProvider",
             "ROCmExecutionProvider",
-            "CPUExecutionProvider"
+            "CPUExecutionProvider",
         ]
-
-        # Output resolution options
-        resolutions = [
-            "hd",              # 1280×720
-            "fhd",             # 1920×1080
-            "2k",              # 2560×1440
-            "4k",              # 3840×2160
-            "8k",              # 7680×4320
-            "no downscaling",  # keep model output resolution
-        ]
+        resolutions = ["hd", "fhd", "2k", "4k", "8k", "no downscaling"]
 
         return {
             "required": {
@@ -164,343 +100,342 @@ class RemacriOnnxUpscaleNode:
                 "model_file": (files,),
                 "provider": (providers,),
                 "final_resolution": (resolutions,),
+                # Number of input images passed to one session.run() call.
+                "batch_size": (
+                    "INT",
+                    {"default": 1, "min": 1, "max": 64, "step": 1},
+                ),
             }
         }
 
-    # Output definition for ComfyUI
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("upsampled",)
     FUNCTION = "upscale"
     CATEGORY = "image/upscale"
     OUTPUT_NODE = True
 
-    # ────────────────────────────────────────────────────────────────────────────
-    # SESSION CREATION + VRAM CHECK + FALLBACK LOGIC
-    # ────────────────────────────────────────────────────────────────────────────
+    @staticmethod
+    def _find_model(model_file):
+        for directory in folder_paths.get_folder_paths("upscale_models"):
+            model_path = os.path.join(directory, model_file)
+            if os.path.isfile(model_path):
+                return model_path
+        raise FileNotFoundError(f"Model '{model_file}' not found.")
+
+    @staticmethod
+    def _shape_is_dynamic(value):
+        return value is None or isinstance(value, str)
 
     @classmethod
-    def _try_create_session(cls, model_path, provider, timing_cache_path):
-        """
-        Attempts to create an ONNX Runtime session using a specific provider.
+    def _validate_model_input(cls, model_path, requested_batch_size, channels, height, width):
+        # Read model metadata without committing the execution session to a GPU provider.
+        metadata_session = ort.InferenceSession(
+            model_path,
+            providers=["CPUExecutionProvider"],
+        )
+        model_input = metadata_session.get_inputs()[0]
+        shape = model_input.shape
 
-        This helper is used by the fallback system. Instead of failing immediately
-        when a provider cannot be initialized, we catch the exception and return
-        None. The caller (_load_session) then tries the next provider.
-        """
-
-        # ────────────────────────────────────────────────────────────────────
-        # VRAM CHECK FOR TENSORRT
-        # ────────────────────────────────────────────────────────────────────
-        if provider == "TensorrtExecutionProvider":
-            try:
-                # Query free VRAM (NVIDIA only). Returns (free, total) in bytes.
-                free_vram, total_vram = torch.cuda.mem_get_info()
-                free_gb = free_vram / (1024**3)
-
-                # Minimum VRAM required for safe TensorRT engine building.
-                # Adjust this if you know your models need more/less.
-                required_gb = 0
-
-                if free_gb < required_gb:
-                    print(
-                        f"[RemacriOnnxUpscale] Skipping TensorRT: only {free_gb:.2f} GB free, "
-                        f"{required_gb} GB required."
-                    )
-                    return None
-
-            except Exception as e:
-                # If VRAM check fails (e.g., AMD GPU, no CUDA), skip TRT entirely
-                print(f"[RemacriOnnxUpscale] VRAM check failed, skipping TensorRT: {e}")
-                return None
-
-        try:
-            # Create ONNX Runtime session options
-            so = ort.SessionOptions()
-
-            # Max out CPU threads
-            cpu_threads = os.cpu_count() or 8
-            so.intra_op_num_threads = cpu_threads
-            so.inter_op_num_threads = cpu_threads
-
-            so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-
-            # Provider list for ORT
-            providers = []
-
-            # ────────────────────────────────────────────────────────────────────
-            # PROVIDER‑SPECIFIC CONFIGURATION
-            # ────────────────────────────────────────────────────────────────────
-            build_start_time = None
-            engine_build_start_time = None
-            engine_cache_files_before = set()
-
-            if provider == "TensorrtExecutionProvider":
-                # Ensure timing cache directory exists
-                cache_dir = os.path.dirname(timing_cache_path)
-                if cache_dir and not os.path.exists(cache_dir):
-                    os.makedirs(cache_dir, exist_ok=True)
-
-                # TIMING CACHE & ENGINE CACHE BUILD TIME MEASUREMENT
-                # Measure timing cache build time only if it does not exist yet
-                if not os.path.exists(timing_cache_path):
-                    print("[RemacriOnnxUpscale] Timing cache not found → building new TensorRT tactics...")
-                    build_start_time = time.time()
-
-                # Measure engine cache build time by checking which files exist before build
-                engine_cache_dir = "./trt_engine_cache"
-                if os.path.exists(engine_cache_dir):
-                    engine_cache_files_before = set(os.listdir(engine_cache_dir))
-                else:
-                    engine_cache_files_before = set()
-                engine_build_start_time = time.time()
-
-                # TensorRT configuration dictionary
-                trt_options = {
-                    "trt_engine_cache_enable": True,
-                    "trt_engine_cache_path": "./trt_engine_cache",
-
-                    "trt_timing_cache_enable": True,
-                    "trt_timing_cache_path": timing_cache_path,
-
-                    "trt_fp16_enable": True,
-                    "trt_int8_enable": False,
-
-                    "trt_dla_enable": False,
-                    "trt_dla_core": 0,
-
-                    # Large workspace for high‑resolution engine builds
-                    "trt_max_workspace_size": 16 * 1024 * 1024 * 1024,
-                }
-
-                providers = [
-                    ("TensorrtExecutionProvider", trt_options),
-                    "CUDAExecutionProvider",
-                ]
-
-            elif provider == "CUDAExecutionProvider":
-                # Standard CUDA backend
-                providers = ["CUDAExecutionProvider"]
-
-            elif provider == "ROCmExecutionProvider":
-                # AMD ROCm backend
-                providers = ["ROCmExecutionProvider"]
-
-            else:
-                # CPU fallback
-                providers = ["CPUExecutionProvider"]
-
-            # ────────────────────────────────────────────────────────────────────
-            # TRY TO CREATE THE SESSION
-            # ────────────────────────────────────────────────────────────────────
-            session = ort.InferenceSession(
-                model_path,
-                sess_options=so,
-                providers=providers
+        if len(shape) != 4:
+            raise RuntimeError(
+                f"Expected a four-dimensional NCHW model input, got {shape!r}."
             )
 
-            print(f"[RemacriOnnxUpscale] Successfully initialized provider: {provider}")
+        fixed_batch = shape[0] if isinstance(shape[0], int) else None
+        if fixed_batch is not None and fixed_batch != requested_batch_size:
+            raise RuntimeError(
+                "The ONNX model has a fixed batch dimension "
+                f"({fixed_batch}), but batch_size is {requested_batch_size}. "
+                "Export the model with a dynamic batch dimension to use true batching."
+            )
 
-            # ────────────────────────────────────────────────────────────────────
-            # PRINT TIMING CACHE BUILD TIME (IF ANY)
-            # ────────────────────────────────────────────────────────────────────
-            if provider == "TensorrtExecutionProvider" and build_start_time is not None:
-                build_end_time = time.time()
-                elapsed = build_end_time - build_start_time
-                print(f"[RemacriOnnxUpscale] TensorRT timing cache build completed in {elapsed:.2f} seconds.")
+        expected = (channels, height, width)
+        for axis, (dimension, actual) in enumerate(zip(shape[1:], expected), start=1):
+            if isinstance(dimension, int) and dimension != actual:
+                axis_names = {1: "channels", 2: "height", 3: "width"}
+                raise RuntimeError(
+                    f"The model requires {axis_names[axis]}={dimension}, got {actual}."
+                )
 
-            # ────────────────────────────────────────────────────────────────────
-            # PRINT ENGINE CACHE BUILD TIME (IF ANY)
-            # ────────────────────────────────────────────────────────────────────
-            if provider == "TensorrtExecutionProvider" and engine_build_start_time is not None:
-                engine_cache_dir = "./trt_engine_cache"
-                if os.path.exists(engine_cache_dir):
-                    engine_cache_files_after = set(os.listdir(engine_cache_dir))
-                else:
-                    engine_cache_files_after = set()
+        return model_input.name, shape
 
-                # Detect newly created engine files
-                new_files = engine_cache_files_after - engine_cache_files_before
+    @classmethod
+    def _try_create_session(
+        cls,
+        model_path,
+        provider,
+        input_name,
+        batch_size,
+        channels,
+        height,
+        width,
+        timing_cache_path,
+    ):
+        available = ort.get_available_providers()
+        if provider not in available:
+            print(f"[RemacriOnnxUpscale] Provider unavailable: {provider}")
+            return None
 
-                if new_files:
-                    engine_build_end_time = time.time()
-                    elapsed_engine = engine_build_end_time - engine_build_start_time
-                    print(f"[RemacriOnnxUpscale] TensorRT engine cache build completed in {elapsed_engine:.2f} seconds.")
-                    print(f"[RemacriOnnxUpscale] New engine files: {', '.join(new_files)}")
-                else:
-                    print("[RemacriOnnxUpscale] TensorRT engine cache already existed → no rebuild needed.")
+        if provider == "TensorrtExecutionProvider":
+            try:
+                free_vram, _ = torch.cuda.mem_get_info()
+                print(
+                    "[RemacriOnnxUpscale] Free CUDA VRAM before TensorRT session: "
+                    f"{free_vram / (1024 ** 3):.2f} GB"
+                )
+            except Exception as exc:
+                print(f"[RemacriOnnxUpscale] CUDA VRAM query failed: {exc}")
 
+        session_options = ort.SessionOptions()
+        cpu_threads = os.cpu_count() or 8
+        session_options.intra_op_num_threads = cpu_threads
+        session_options.inter_op_num_threads = cpu_threads
+        session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+
+        providers = None
+        if provider == "TensorrtExecutionProvider":
+            os.makedirs(os.path.dirname(timing_cache_path), exist_ok=True)
+            os.makedirs("./trt_engine_cache", exist_ok=True)
+
+            # A dynamic TensorRT optimization profile allows all real batch sizes
+            # from 1 to the user-selected maximum. The last, smaller batch therefore
+            # uses the same engine instead of being padded or processed image by image.
+            min_shape = f"{input_name}:1x{channels}x{height}x{width}"
+            opt_shape = f"{input_name}:{batch_size}x{channels}x{height}x{width}"
+            max_shape = opt_shape
+
+            trt_options = {
+                "trt_engine_cache_enable": True,
+                "trt_engine_cache_path": "./trt_engine_cache",
+                "trt_timing_cache_enable": True,
+                "trt_timing_cache_path": timing_cache_path,
+                "trt_fp16_enable": True,
+                "trt_int8_enable": False,
+                "trt_dla_enable": False,
+                "trt_max_workspace_size": 16 * 1024 * 1024 * 1024,
+                "trt_profile_min_shapes": min_shape,
+                "trt_profile_opt_shapes": opt_shape,
+                "trt_profile_max_shapes": max_shape,
+            }
+            providers = [
+                ("TensorrtExecutionProvider", trt_options),
+                "CUDAExecutionProvider",
+            ]
+        else:
+            providers = [provider]
+
+        started = time.time()
+        try:
+            session = ort.InferenceSession(
+                model_path,
+                sess_options=session_options,
+                providers=providers,
+            )
+            active = session.get_providers()[0] if session.get_providers() else provider
+            print(
+                f"[RemacriOnnxUpscale] Initialized {active} "
+                f"for batch range 1-{batch_size} in {time.time() - started:.2f} seconds."
+            )
             return session
-
-        except Exception as e:
-            # Provider failed → return None so fallback can continue
-            print(f"[RemacriOnnxUpscale] Provider {provider} failed: {e}")
+        except Exception as exc:
+            print(f"[RemacriOnnxUpscale] Provider {provider} failed: {exc}")
             return None
 
     @classmethod
-    def _load_session(cls, model_path, provider, timing_cache_path):
-        """
-        Creates or reuses an ONNX Runtime session with full fallback logic.
-
-        Fallback order:
-            1. User-selected provider
-            2. CUDA (NVIDIA)
-            3. ROCm (AMD)
-            4. CPU (always works)
-        """
-
-        # Reuse cached session if nothing relevant changed
-        if (
-            cls._session is not None
-            and cls._model_path == model_path
-            and cls._provider == provider
-            and cls._timing_cache_path == timing_cache_path
-        ):
+    def _load_session(
+        cls,
+        model_path,
+        provider,
+        input_name,
+        batch_size,
+        channels,
+        height,
+        width,
+        timing_cache_path,
+    ):
+        session_key = (
+            model_path,
+            provider,
+            input_name,
+            batch_size,
+            channels,
+            height,
+            width,
+            timing_cache_path,
+        )
+        if cls._session is not None and cls._session_key == session_key:
             return cls._session
 
-        # Fallback chain: we always try user-selected first, then fall back
         fallback_chain = [
-            provider,                     # user-selected
+            provider,
             "CUDAExecutionProvider",
             "ROCmExecutionProvider",
             "CPUExecutionProvider",
         ]
 
         tried = set()
-
-        # Try each provider in order
-        for p in fallback_chain:
-            if p in tried:
+        for candidate in fallback_chain:
+            if candidate in tried:
                 continue
-            tried.add(p)
+            tried.add(candidate)
 
-            session = cls._try_create_session(model_path, p, timing_cache_path)
+            session = cls._try_create_session(
+                model_path=model_path,
+                provider=candidate,
+                input_name=input_name,
+                batch_size=batch_size,
+                channels=channels,
+                height=height,
+                width=width,
+                timing_cache_path=timing_cache_path,
+            )
             if session is not None:
-                # Cache session metadata
                 cls._session = session
-                cls._provider = p
-                cls._model_path = model_path
-                cls._timing_cache_path = timing_cache_path
-
-                print(f"[RemacriOnnxUpscale] Using provider: {p}")
+                cls._session_key = session_key
+                cls._active_provider = session.get_providers()[0]
                 return session
 
-        # If all providers fail, raise an error
-        raise RuntimeError("All providers failed. Cannot create ONNX Runtime session.")
+        raise RuntimeError("All ONNX Runtime execution providers failed.")
 
-    # ────────────────────────────────────────────────────────────────────────────
-    # MAIN UPSCALE FUNCTION
-    # ────────────────────────────────────────────────────────────────────────────
+    @staticmethod
+    def _resize_output(image, final_resolution):
+        sizes = {
+            "hd": (1280, 720),
+            "fhd": (1920, 1080),
+            "2k": (2560, 1440),
+            "4k": (3840, 2160),
+            "8k": (7680, 4320),
+        }
+        target = sizes.get(final_resolution)
+        if target is None:
+            return image
+        return cv2.resize(image, target, interpolation=cv2.INTER_AREA)
 
-    def upscale(self, image, model_file, provider, final_resolution, progress=None):
-        """
-        Main execution function called by ComfyUI.
+    def upscale(
+        self,
+        image,
+        model_file,
+        provider,
+        final_resolution,
+        batch_size,
+        progress=None,
+    ):
+        model_path = self._find_model(model_file)
 
-        Steps:
-            1. Locate the ONNX model file.
-            2. Ensure the input image has a batch dimension.
-            3. Determine input resolution (H×W).
-            4. Build a resolution‑specific TensorRT timing‑cache path.
-            5. Load or reuse the ONNX Runtime session (with fallback logic).
-            6. Process each image individually.
-            7. Convert ComfyUI tensor → NumPy → ONNX input format.
-            8. Run inference.
-            9. Convert ONNX output → NumPy → ComfyUI tensor.
-            10. Optionally resize to HD/FHD/2K/4K/8K.
-        """
-
-        # 1. Locate the ONNX model file
-        model_path = None
-        for d in folder_paths.get_folder_paths("upscale_models"):
-            p = os.path.join(d, model_file)
-            if os.path.exists(p):
-                model_path = p
-                break
-
-        if model_path is None:
-            raise FileNotFoundError(f"Model '{model_file}' not found.")
-
-        # 2. Ensure batch dimension
         if image.dim() == 3:
             image = image.unsqueeze(0)
+        if image.dim() != 4:
+            raise ValueError(f"Expected IMAGE in NHWC format, got shape {tuple(image.shape)}.")
 
-        # 3. Determine input resolution
-        _, H, W, _ = image.shape
+        total, height, width, channels = image.shape
+        if total < 1:
+            raise ValueError("The input batch is empty.")
 
-        # 4. Build timing cache path
-        timing_cache_dir = "./trt_timing_cache"
-        timing_cache_filename = f"trt_timing_cache_{H}x{W}.bin"
-        timing_cache_path = os.path.join(timing_cache_dir, timing_cache_filename)
+        batch_size = max(1, min(int(batch_size), int(total)))
 
-        # 5. Invalidate TRT caches if torch version changed
-        self._check_runtime_versions_and_invalidate_cache(timing_cache_path)
-
-        # 6. Load ONNX Runtime session (this is the missing line!)
-        session = self._load_session(model_path, provider, timing_cache_path)
-
-
-        # Prepare output list and progress bar
-        out_batch = []
-        total = image.shape[0]
-
-        pbar = tqdm(
-            total=100,
-            desc=f"Upscaling (Image 1/{total})",
-            ncols=100,
-            colour="blue",
-            dynamic_ncols=True,
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
+        self._check_runtime_versions_and_invalidate_cache()
+        input_name, _ = self._validate_model_input(
+            model_path,
+            requested_batch_size=batch_size,
+            channels=channels,
+            height=height,
+            width=width,
         )
 
-        # 6. Process each image individually
-        for i in range(total):
+        timing_cache_path = os.path.join(
+            "./trt_timing_cache",
+            f"trt_timing_{height}x{width}_b1-{batch_size}.bin",
+        )
+        session = self._load_session(
+            model_path=model_path,
+            provider=provider,
+            input_name=input_name,
+            batch_size=batch_size,
+            channels=channels,
+            height=height,
+            width=width,
+            timing_cache_path=timing_cache_path,
+        )
 
-            # Convert ComfyUI tensor → uint8 NumPy array
-            arr = (image[i].cpu().numpy() * 255).astype(np.uint8)
+        output_batches = []
+        processed = 0
+        number_of_batches = (total + batch_size - 1) // batch_size
 
-            # Convert HWC → NCHW and normalize to [0,1]
-            inp = arr.transpose(2, 0, 1)[None].astype(np.float32) / 255.0
+        pbar = tqdm(
+            total=total,
+            desc=f"Upscaling batch 1/{number_of_batches}",
+            unit="image",
+            dynamic_ncols=True,
+        )
 
-            # 7. Run ONNX inference
-            ort_inputs = {session.get_inputs()[0].name: inp}
-            ort_outs = session.run(None, ort_inputs)
+        try:
+            for batch_index, start in enumerate(range(0, total, batch_size), start=1):
+                end = min(start + batch_size, total)
 
-            # Convert NCHW → HWC
-            out = ort_outs[0][0].transpose(1, 2, 0)
+                # ComfyUI IMAGE is float NHWC. Convert the complete slice to NCHW,
+                # then perform exactly one ONNX Runtime call for this real batch.
+                input_batch = (
+                    image[start:end]
+                    .detach()
+                    .cpu()
+                    .numpy()
+                    .astype(np.float32, copy=False)
+                    .transpose(0, 3, 1, 2)
+                )
+                input_batch = np.ascontiguousarray(input_batch)
 
-            # 8. Optional final resolution scaling
-            if final_resolution == "hd":
-                out = cv2.resize(out, (1280, 720), interpolation=cv2.INTER_AREA)
+                ort_outputs = session.run(None, {input_name: input_batch})
+                if not ort_outputs:
+                    raise RuntimeError("The ONNX model returned no outputs.")
 
-            elif final_resolution == "fhd":
-                out = cv2.resize(out, (1920, 1080), interpolation=cv2.INTER_AREA)
+                output_batch = np.asarray(ort_outputs[0])
+                if output_batch.ndim != 4:
+                    raise RuntimeError(
+                        f"Expected four-dimensional NCHW output, got {output_batch.shape}."
+                    )
+                if output_batch.shape[0] != end - start:
+                    raise RuntimeError(
+                        "The ONNX output batch size does not match the input batch size: "
+                        f"{output_batch.shape[0]} != {end - start}."
+                    )
 
-            elif final_resolution == "2k":
-                out = cv2.resize(out, (2560, 1440), interpolation=cv2.INTER_AREA)
+                output_batch = output_batch.transpose(0, 2, 3, 1)
+                processed_images = []
+                for output_image in output_batch:
+                    output_image = self._resize_output(output_image, final_resolution)
+                    output_image = np.nan_to_num(
+                        output_image,
+                        nan=0.0,
+                        posinf=1.0,
+                        neginf=0.0,
+                    )
+                    processed_images.append(np.clip(output_image, 0.0, 1.0))
 
-            elif final_resolution == "4k":
-                out = cv2.resize(out, (3840, 2160), interpolation=cv2.INTER_AREA)
+                output_batches.append(
+                    np.stack(processed_images, axis=0).astype(np.float32, copy=False)
+                )
 
-            elif final_resolution == "8k":
-                out = cv2.resize(out, (7680, 4320), interpolation=cv2.INTER_AREA)
+                completed = end - start
+                processed += completed
+                pbar.update(completed)
+                pbar.set_description(
+                    f"Upscaling batch {batch_index}/{number_of_batches} "
+                    f"({start + 1}-{end}/{total})"
+                )
 
-            # 9. Clean numerical issues (NaN, inf) and clamp
-            out = np.nan_to_num(out, nan=0.0, posinf=1.0, neginf=0.0)
-            out = np.clip(out, 0.0, 1.0)
+                if progress is not None:
+                    progress(int(processed / total * 100))
+        finally:
+            pbar.close()
 
-            out_batch.append(out)
+        output = np.concatenate(output_batches, axis=0)
+        return (torch.from_numpy(np.ascontiguousarray(output)).float(),)
 
-            # Update progress bar
-            percent = int(((i + 1) / total) * 100)
-            if progress is not None:
-                progress(percent)
 
-            pbar.update(percent - pbar.n)
-            pbar.set_description(f"Upscaling (Image {i+1}/{total})")
+NODE_CLASS_MAPPINGS = {
+    "RemacriOnnxUpscale": RemacriOnnxUpscaleNode,
+}
 
-        pbar.close()
-
-        # 10. Stack outputs and convert back to ComfyUI tensor
-        out = np.stack(out_batch, axis=0).astype(np.float32)
-        out_tensor = torch.from_numpy(out).float()
-
-        return (out_tensor,)
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "RemacriOnnxUpscale": "Remacri ONNX Upscale (True Batch)",
+}
