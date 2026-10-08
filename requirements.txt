@@ -1,5 +1,5 @@
 onnxruntime-gpu
 numpy 
-opencv-python 
+opencv-contrib-python
 torch 
 tqdm
