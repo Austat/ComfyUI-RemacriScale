@@ -7,6 +7,7 @@ Using Remacri upscaler (you can use whatever 4x upscaler that is supported as yo
 Installation
 
 Method 1: 
+           
            Clone the Repository 
            Navigate to your ComfyUI custom_nodes directory. 
 
@@ -25,7 +26,9 @@ Method 1:
 
            Restart ComfyUI.
 
-First upscaling run will take longer time as each used resolution needs it's own TensorRT engine. Consequent runs after that are considerably faster, as they use the previously created timing cache. With nVidia 5090 RTX, it took 5 minutes to build the engine for 1280 x 720 resolution and after the engine is build there's no need to build it again until system changes (software like CUDA, PyTorch or Onnx-gpu).
+First upscaling run will take longer time as each used resolution needs it's own TensorRT engine. 
+Consequent runs after that are considerably faster, as they use the previously created timing cache. 
+With nVidia 5090 RTX, it took 5 minutes to build the engine for 1280 x 720 resolution and after the engine is build there's no need to build it again until system changes (software like CUDA, PyTorch or Onnx-gpu).
 
 Supported methods are:
 
