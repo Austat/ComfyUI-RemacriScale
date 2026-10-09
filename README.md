@@ -1,27 +1,35 @@
 # ComfyUI-RemacriScale
 Using Remacri upscaler (you can use whatever 4x upscaler that is supported as you want), upscale a video using one of three providers supported by onnx and then downscale.
 
-<img width="266" height="164" alt="image" src="https://github.com/user-attachments/assets/7c3d327e-6782-4df7-9061-fe671b3f68e7" />
+<img width="439" height="321" alt="image" src="https://github.com/user-attachments/assets/a088e068-7561-4c7d-baca-cd9269b50dff" />
+
+
 
 Installation
 
-Method 1: Clone the Repository Navigate to your ComfyUI custom_nodes directory. 
-TensorRT based upscaling needs nVidias NVIDIA TensorRT 10.x. You can get it from here:
-https://developer.nvidia.com/tensorrt/download/10x
+Method 1: 
+           
+           Clone the Repository 
+           Navigate to your ComfyUI custom_nodes directory. 
 
-Run:
+           TensorRT based upscaling needs nVidias NVIDIA TensorRT 10.x. You can get it from here:
+           https://developer.nvidia.com/tensorrt/download/10x
 
-git clone https://github.com/Austat/ComfyUI-RemacriScale
+           Run:
 
-cd ComfyUI-RemacriScale
+           git clone https://github.com/Austat/ComfyUI-RemacriScale
 
-pip install -r requirements.txt
+           cd ComfyUI-RemacriScale
 
-Download needed onnx - files to your ComfyUI or custom models/upscale_models/ - folder.
+           pip install -r requirements.txt
 
-Restart ComfyUI.
+           Download needed onnx - files to your ComfyUI or custom models/upscale_models/ - folder.
 
-First upscaling run will take longer time as each used resolution needs it's own TensorRT engine. Consequent runs after that are considerably faster, as they use the previously created timing cache. With nVidia 5090 RTX, it took 5 minutes to build the engine for 1280 x 720 resolution and after the engine is build there's no need to build it again until system changes (software like CUDA, PyTorch or Onnx-gpu).
+           Restart ComfyUI.
+
+First upscaling run will take longer time as each used resolution needs it's own TensorRT engine. 
+Consequent runs after that are considerably faster, as they use the previously created timing cache. 
+With nVidia 5090 RTX, it took 5 minutes to build the engine for 1280 x 720 resolution and after the engine is build there's no need to build it again until system changes (software like CUDA, PyTorch or Onnx-gpu).
 
 Supported methods are:
 
