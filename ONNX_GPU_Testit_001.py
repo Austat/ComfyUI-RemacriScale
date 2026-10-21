@@ -1,4 +1,4 @@
-# If you have problems runnin the node, you can use this standalon helper- script to debug your problem.
+# If you have problems running the node, you can use this standalone helper- script to debug your problem.
 # It will check that your base system is in order. Run this script and *.onnx-file from the same folder.
 # The folder can be any folder in your computer.
 # You can usually disrecard any warnings, but errors will also result in errors on ComfyUI- node.
