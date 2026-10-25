@@ -6,6 +6,7 @@ High VRAM version:
 
 <img width="439" height="321" alt="image" src="https://github.com/user-attachments/assets/a088e068-7561-4c7d-baca-cd9269b50dff" />
 
+
 Low VRAM version (legacy):
 
 <img width="464" height="231" alt="image" src="https://github.com/user-attachments/assets/6990f6a5-6e64-416c-b096-ca1a2c591da2" />
