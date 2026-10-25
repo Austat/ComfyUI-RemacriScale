@@ -1,4 +1,4 @@
-# file: ComfyUI/custom_nodes/ComfyUI-RemacriScale/remacri_node.py
+# file: ComfyUI/custom_nodes/ComfyUI-RemacriScale/remacri_node_lowvram.py
 
 import onnxruntime as ort
 import numpy as np
@@ -11,7 +11,7 @@ from tqdm import tqdm
 import time  # used for timing TensorRT cache and engine build durations
 
 
-class RemacriOnnxUpscaleNode:
+class RemacriOnnxUpscaleNodeLowVram:
     """
     Custom ComfyUI node for ONNX-based image upscaling.
 
