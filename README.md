@@ -2,9 +2,11 @@
 Using Remacri upscaler (you can use whatever 4x upscaler that is supported as you want), upscale a video using one of three providers supported by onnx and then downscale. 
 It should support upscalers built on the ESRGAN (Enhanced Super-Resolution Generative Adversarial Networks) architecture. This is ONNX-port of FoolhardyEVO's [4xRemacri](https://openmodeldb.info/models/4x-Remacri) -upscaler.
 
+High VRAM version:
 <img width="439" height="321" alt="image" src="https://github.com/user-attachments/assets/a088e068-7561-4c7d-baca-cd9269b50dff" />
 
-
+Low VRAM version (legacy):
+<img width="464" height="231" alt="image" src="https://github.com/user-attachments/assets/6990f6a5-6e64-416c-b096-ca1a2c591da2" />
 
 Installation
 
