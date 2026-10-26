@@ -4,7 +4,7 @@ It should support upscalers built on the ESRGAN (Enhanced Super-Resolution Gener
 
 High VRAM version:
 <br>
-<img width="439" height="321" alt="image" src="https://github.com/user-attachments/assets/a088e068-7561-4c7d-baca-cd9269b50dff" />
+<img width="406" height="417" alt="image" src="https://github.com/user-attachments/assets/33319412-88ab-4192-ad7c-3ad136120624" />
 <br>
 <br>
 
