@@ -3,16 +3,19 @@ Using Remacri upscaler (you can use whatever 4x upscaler that is supported as yo
 It should support upscalers built on the ESRGAN (Enhanced Super-Resolution Generative Adversarial Networks) architecture. This is ONNX-port of FoolhardyEVO's [4xRemacri](https://openmodeldb.info/models/4x-Remacri) -upscaler.
 
 High VRAM version:
-
+<br>
 <img width="439" height="321" alt="image" src="https://github.com/user-attachments/assets/a088e068-7561-4c7d-baca-cd9269b50dff" />
-
+<br>
+<br>
 
 Low VRAM version (legacy):
-
+<br>
 <img width="464" height="231" alt="image" src="https://github.com/user-attachments/assets/6990f6a5-6e64-416c-b096-ca1a2c591da2" />
+<br>
+<br>
 
 Installation
-
+<br>
 Method 1: 
            
            Clone the Repository 
@@ -32,11 +35,11 @@ Method 1:
            Download needed onnx - files to your ComfyUI or custom models/upscale_models/ - folder.
 
            Restart ComfyUI.
-
+<br>
 First upscaling run will take longer time as each used resolution needs it's own TensorRT engine. 
 Consequent runs after that are considerably faster, as they use the previously created timing cache. 
 With nVidia 5090 RTX, it took 5 minutes to build the engine for 1280 x 720 resolution and after the engine is build there's no need to build it again until system changes (software like CUDA, PyTorch or Onnx-gpu).
-
+<br>
 Supported methods are:
 
            "TensorrtExecutionProvider",
