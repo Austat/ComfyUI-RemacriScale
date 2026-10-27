@@ -1,7 +1,13 @@
 # ComfyUI-RemacriScale
 Using Remacri upscaler (you can use whatever 4x upscaler that is supported as you want), upscale a video using one of three providers supported by onnx and then downscale. 
 It should support upscalers built on the ESRGAN (Enhanced Super-Resolution Generative Adversarial Networks) architecture. This is ONNX-port of FoolhardyEVO's [4xRemacri](https://openmodeldb.info/models/4x-Remacri) -upscaler.
-
+<br>
+<br>
+It comes in two flavors: "High VRAM Multi-GPU"- version and "Low VRAM version (legacy)". 
+Use multi-gpu version even if you have one GPU. 
+Legacy version is just for older compatiblilty.
+<br>
+<br>
 High VRAM version:
 <br>
 <img width="406" height="417" alt="image" src="https://github.com/user-attachments/assets/33319412-88ab-4192-ad7c-3ad136120624" />
