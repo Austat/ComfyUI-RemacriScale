@@ -1,14 +1,12 @@
 # ComfyUI-RemacriScale
 
 <br>
-<br>
 
 *Hath thy gaze ever lingered upon an ancient portrait held within thy hand—perchance a faded vision of thy mother and father upon their blessed day of marriage? 
 Hath it brought thee sorrow to see such precious memories veiled in the cruel mists of blur and decay? 
 Know then, that ESRGAN upscalers were fashioned for precisely such longings. 
 They gently lift the shroud of time, restoring each forgotten detail until the image shineth forth with a wondrous, crisp clarity.*
 
-<br>
 <br>
 
 Using Remacri upscaler (you can use whatever 4x upscaler that is supported as you want), upscale a video using one of three providers supported by onnx and then downscale. 
