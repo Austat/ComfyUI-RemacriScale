@@ -1,4 +1,13 @@
 # ComfyUI-RemacriScale
+
+<br>
+<br>
+
+*Have you ever wondered a old photo in your hand, maybe an old family photo in your hand, maybe photo of your mother and father at their wedding day. What if it were more clear and crips with better image quality, wouldn't that be great? ESRGAN upscalers are just the right tool for these scenarios. They upscale the image or video and change the quality to be more detailed and clear.*
+
+<br>
+<br>
+
 Using Remacri upscaler (you can use whatever 4x upscaler that is supported as you want), upscale a video using one of three providers supported by onnx and then downscale. 
 It should support upscalers built on the ESRGAN (Enhanced Super-Resolution Generative Adversarial Networks) architecture. This is ONNX-port of FoolhardyEVO's [4xRemacri](https://openmodeldb.info/models/4x-Remacri) -upscaler.
 <br>
