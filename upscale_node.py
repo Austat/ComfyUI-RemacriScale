@@ -5,7 +5,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "RemacriOnnxUpscaleNode": "Remacri ONNX Upscale",
+    "RemacriOnnxUpscaleNode": "Remacri Upscale (Multi-GPU ONNX)",
 }
 
 __all__ = [

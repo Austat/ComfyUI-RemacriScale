@@ -9,6 +9,6 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "RemacriOnnxUpscaleNode": "Upscale node (ONNX)",
+    "RemacriOnnxUpscaleNode": "Upscale node (Multi-GPU ONNX)",
     "RemacriOnnxUpscaleNodeLowVram": "Upscale node LowVRAM (ONNX)",
 }
