@@ -3,7 +3,10 @@
 <br>
 <br>
 
-*Have you ever wondered a old photo in your hand, maybe an old family photo in your hand, maybe photo of your mother and father at their wedding day. What if it were more clear and crips with better image quality, wouldn't that be great? ESRGAN upscalers are just the right tool for these scenarios. They upscale the image or video and change the quality to be more detailed and clear.*
+*Hath thy gaze ever lingered upon an ancient portrait held within thy hand—perchance a faded vision of thy mother and father upon their blessed day of marriage? 
+Hath it brought thee sorrow to see such precious memories veiled in the cruel mists of blur and decay? 
+Know then, that ESRGAN upscalers were fashioned for precisely such longings. 
+They gently lift the shroud of time, restoring each forgotten detail until the image shineth forth with a wondrous, crisp clarity.*
 
 <br>
 <br>
