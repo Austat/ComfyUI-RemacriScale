@@ -16,7 +16,7 @@ It should support upscalers built on the ESRGAN (Enhanced Super-Resolution Gener
 <br>
 It comes in two flavors: "High VRAM Multi-GPU"- version and "Low VRAM version (legacy)". 
 Use multi-gpu version even if you have one GPU. 
-Legacy version is just for older compatiblilty.
+Legacy version is just for older compatibility.
 <br>
 <br>
 High VRAM version:
