@@ -2,10 +2,11 @@
 
 <br>
 
-*Hath thy gaze ever lingered upon an ancient portrait held within thy hand—perchance a faded vision of thy mother and father upon their blessed day of marriage? 
+*"Hath thy gaze ever lingered upon an ancient portrait held within thy hand—perchance a faded vision of thy mother and father upon their blessed day of marriage? 
 Hath it brought thee sorrow to see such precious memories veiled in the cruel mists of blur and decay? 
 Know then, that ESRGAN upscalers were fashioned for precisely such longings. 
-They gently lift the shroud of time, restoring each forgotten detail until the image shineth forth with a wondrous, crisp clarity.*
+They gently lift the shroud of time, restoring each forgotten detail until the image shineth forth with a wondrous, crisp clarity." <br> -The Ancient Chronicles of Sorrow, Book IV, Chapter VIII (The Restoration of Lost Visions)
+Written by the Scribe Austat, The High Priest of the Melancholic Matrix*
 
 <br>
 
