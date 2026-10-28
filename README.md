@@ -9,7 +9,7 @@ They gently lift the shroud of time, restoring each forgotten detail until the i
 Written by the Scribe Austat, The High Priest of the Melancholic Matrix*
 
 <br>
-
+## 
 Using Remacri upscaler (you can use whatever 4x upscaler that is supported as you want), upscale a video using one of three providers supported by onnx and then downscale. 
 It should support upscalers built on the ESRGAN (Enhanced Super-Resolution Generative Adversarial Networks) architecture. This is ONNX-port of FoolhardyEVO's [4xRemacri](https://openmodeldb.info/models/4x-Remacri) -upscaler.
 <br>
