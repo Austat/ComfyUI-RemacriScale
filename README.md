@@ -58,21 +58,21 @@ Folder structure should be something like this:
 
 ```text
 
-           ├── assets/
-           │   ├── cache.py
-           │   ├── inference.py
-           │   ├── model.py
-           │   ├── node.py
-           │   └── session.py
-           ├── upscale_models/
-           │   └── 4x_foolhardy_Remacri.onnx
-           ├── LICENSE
-           ├── ONNX_GPU_Testit_001.py
-           ├── README.md
-           ├── __init__.py
-           ├── requirements.txt
-           ├── upscale_node.py
-           └── upscale_node_lowvram.py
+├── assets/
+│   ├── cache.py
+│   ├── inference.py
+│   ├── model.py
+│   ├── node.py
+│   └── session.py
+├── upscale_models/
+│   └── 4x_foolhardy_Remacri.onnx
+├── LICENSE
+├── ONNX_GPU_Testit_001.py
+├── README.md
+├── __init__.py
+├── requirements.txt
+├── upscale_node.py
+└── upscale_node_lowvram.py
 
 ```
 
