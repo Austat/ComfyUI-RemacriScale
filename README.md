@@ -53,16 +53,40 @@ Method 1:
 
            Restart ComfyUI.
 <br>
+
+Folder structure should be something like this:
+
+```text
+
+├── assets/
+│   ├── cache.py
+│   ├── inference.py
+│   ├── model.py
+│   ├── node.py
+│   └── session.py
+├── upscale_models/
+│   └── 4x_foolhardy_Remacri.onnx
+├── LICENSE
+├── ONNX_GPU_Testit_001.py
+├── README.md
+├── __init__.py
+├── requirements.txt
+├── upscale_node.py
+└── upscale_node_lowvram.py
+
+```
+
 First upscaling run will take longer time as each used resolution needs it's own TensorRT engine. 
 Consequent runs after that are considerably faster, as they use the previously created timing cache. 
 With nVidia 5090 RTX, it took 5 minutes to build the engine for 1280 x 720 resolution and after the engine is build there's no need to build it again until system changes (software like CUDA, PyTorch or Onnx-gpu).
 <br>
 Supported methods are:
 
-           "TensorrtExecutionProvider",
-            "CUDAExecutionProvider",
-            "ROCmExecutionProvider",
-            "CPUExecutionProvider"
+           "CPUExecutionProvider",
+           "CUDAExecutionProvider",
+           "MIGraphXExecutionProvider"
+           "ROCmExecutionProvider",
+           "TensorrtExecutionProvider"
 
 <details>
   <summary>Details about TensorRT timing cache and engine (aka tactic timing data)</summary>
