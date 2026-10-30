@@ -7,6 +7,7 @@ import cv2
 import torch
 import folder_paths
 import shutil
+from comfy.utils import ProgressBar
 from tqdm import tqdm
 import time  # used for timing TensorRT cache and engine build durations
 
@@ -168,8 +169,8 @@ class RemacriOnnxUpscaleNodeLowVram:
         }
 
     # Output definition for ComfyUI
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("upsampled",)
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("upsampled", "upscale_info")
     FUNCTION = "upscale"
     CATEGORY = "image/upscale"
     OUTPUT_NODE = True
@@ -432,19 +433,12 @@ class RemacriOnnxUpscaleNodeLowVram:
         session = self._load_session(model_path, provider, timing_cache_path)
 
 
-        # Prepare output list and progress bar
+        # Prepare output list and ComfyUI progress bar
         out_batch = []
         total = image.shape[0]
-
-        pbar = tqdm(
-            total=100,
-            desc=f"Upscaling (Image 1/{total})",
-            ncols=100,
-            colour="blue",
-            dynamic_ncols=True,
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
-        )
-
+        comfy_pbar = ProgressBar(total)
+        terminal_pbar = tqdm(total=total, desc="Remacri LowVRAM upscale", unit="image", dynamic_ncols=True)
+        upscaled_hw = None
         # 6. Process each image individually
         for i in range(total):
 
@@ -458,8 +452,17 @@ class RemacriOnnxUpscaleNodeLowVram:
             ort_inputs = {session.get_inputs()[0].name: inp}
             ort_outs = session.run(None, ort_inputs)
 
+            # Capture native model output before optional final downscale.
+            native_out = ort_outs[0][0]
+            current_upscaled_hw = (int(native_out.shape[1]), int(native_out.shape[2]))
+            if upscaled_hw is None:
+                upscaled_hw = current_upscaled_hw
+            elif upscaled_hw != current_upscaled_hw:
+                raise RuntimeError(
+                    f"Inconsistent model output sizes: {upscaled_hw} and {current_upscaled_hw}"
+                )
             # Convert NCHW → HWC
-            out = ort_outs[0][0].transpose(1, 2, 0)
+            out = native_out.transpose(1, 2, 0)
 
             # 8. Optional final resolution scaling
             if final_resolution == "hd":
@@ -483,18 +486,21 @@ class RemacriOnnxUpscaleNodeLowVram:
 
             out_batch.append(out)
 
-            # Update progress bar
-            percent = int(((i + 1) / total) * 100)
-            if progress is not None:
-                progress(percent)
+            # Update both the ComfyUI and terminal progress bars.
+            comfy_pbar.update(1)
+            terminal_pbar.update(1)
 
-            pbar.update(percent - pbar.n)
-            pbar.set_description(f"Upscaling (Image {i+1}/{total})")
-
-        pbar.close()
+        terminal_pbar.close()
 
         # 10. Stack outputs and convert back to ComfyUI tensor
         out = np.stack(out_batch, axis=0).astype(np.float32)
         out_tensor = torch.from_numpy(out).float()
-
-        return (out_tensor,)
+        final_h, final_w = int(out_tensor.shape[1]), int(out_tensor.shape[2])
+        upscale_h, upscale_w = upscaled_hw or (final_h, final_w)
+        info = (
+            f"Original input resolution: {H} x {W}\n"
+            f"Model upscale resolution: {upscale_h} x {upscale_w}\n"
+            f"Final downscaled resolution: {final_h} x {final_w}"
+        )
+        print(f"[RemacriOnnxUpscale] Resolution summary:\n{info}")
+        return (out_tensor, info)

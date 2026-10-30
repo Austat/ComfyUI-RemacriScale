@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Dict, Tuple
 import torch
 import torch.nn.functional as F
+from comfy.utils import ProgressBar
 from tqdm import tqdm
 import folder_paths
 from .cache import RuntimeCacheMixin
@@ -64,7 +65,7 @@ class RemacriOnnxUpscaleNode(RuntimeCacheMixin, ModelMixin, SessionMixin, Infere
             "diagnostics": ("BOOLEAN", {"default":False})},
             "optional": {"device_ids": ("STRING", {"default":""})}}
 
-    RETURN_TYPES=("IMAGE",); RETURN_NAMES=("upsampled",); FUNCTION="upscale"
+    RETURN_TYPES=("IMAGE", "STRING"); RETURN_NAMES=("upsampled", "upscale_info"); FUNCTION="upscale"
     CATEGORY="image/upscale"; OUTPUT_NODE=True
 
     @staticmethod
@@ -125,10 +126,12 @@ class RemacriOnnxUpscaleNode(RuntimeCacheMixin, ModelMixin, SessionMixin, Infere
         jobs=queue.Queue(); target=self._target_size(final_resolution)
         for start in range(0,total,batch_size): jobs.put((start,min(start+batch_size,total)))
         outputs=[None]*((total+batch_size-1)//batch_size); lock=threading.Lock(); errors=[]
-        pbar=tqdm(total=total,desc="Remacri multi-GPU upscale",unit="image",dynamic_ncols=True)
+        comfy_pbar=ProgressBar(total)
+        terminal_pbar=tqdm(total=total,desc="Remacri multi-GPU upscale",unit="image",dynamic_ncols=True)
         processed=0
+        upscaled_hw=None
         def worker(did):
-            nonlocal processed
+            nonlocal processed, upscaled_hw
             sess,active=sessions[did]; s=stats[did]
             direct=did is not None and active in ("CUDAExecutionProvider","TensorrtExecutionProvider")
             device=torch.device("cuda",did) if direct else torch.device("cpu")
@@ -145,6 +148,14 @@ class RemacriOnnxUpscaleNode(RuntimeCacheMixin, ModelMixin, SessionMixin, Infere
                         s.prepare_seconds+=time.perf_counter()-t; t=time.perf_counter()
                         out=(self._run_gpu_iobinding(sess,input_name,output_name,inp)
                              if direct else self._run_numpy(sess,input_name,inp))
+                        current_upscaled_hw=(int(out.shape[-2]), int(out.shape[-1]))
+                        with lock:
+                            if upscaled_hw is None:
+                                upscaled_hw=current_upscaled_hw
+                            elif upscaled_hw != current_upscaled_hw:
+                                raise RuntimeError(
+                                    f"Inconsistent model output sizes: {upscaled_hw} and {current_upscaled_hw}"
+                                )
                         if direct: torch.cuda.synchronize(did)
                         s.inference_seconds+=time.perf_counter()-t; t=time.perf_counter()
                         out=torch.nan_to_num(out,nan=0,posinf=1,neginf=0).clamp_(0,1)
@@ -154,8 +165,7 @@ class RemacriOnnxUpscaleNode(RuntimeCacheMixin, ModelMixin, SessionMixin, Infere
                         s.post_seconds+=time.perf_counter()-t
                         with lock:
                             outputs[start//batch_size]=out; n=end-start
-                            s.images+=n; s.batches+=1; processed+=n; pbar.update(n)
-                            if progress: progress(int(processed/total*100))
+                            s.images+=n; s.batches+=1; processed+=n; comfy_pbar.update(n); terminal_pbar.update(n)
                     finally: jobs.task_done()
             except Exception as exc:
                 s.errors+=1
@@ -164,10 +174,15 @@ class RemacriOnnxUpscaleNode(RuntimeCacheMixin, ModelMixin, SessionMixin, Infere
         threads=[threading.Thread(target=worker,args=(d,)) for d in selected]
         for t in threads:t.start()
         for t in threads:t.join()
-        pbar.close()
         if errors: raise RuntimeError(f"Worker GPU {errors[0][0]} failed: {errors[0][1]}")
         if any(x is None for x in outputs): raise RuntimeError("One or more output batches are missing")
         result=torch.cat(outputs,dim=0)
         self._summary(stats,total,time.perf_counter()-wall,diagnostics)
+        final_h,final_w=int(result.shape[1]),int(result.shape[2])
+        upscale_h,upscale_w=upscaled_hw or (final_h,final_w)
+        info=(f"Original input resolution: {h} x {w}\n"
+              f"Model upscale resolution: {upscale_h} x {upscale_w}\n"
+              f"Final downscaled resolution: {final_h} x {final_w}")
+        print(f"[RemacriOnnxUpscale] Resolution summary:\n{info}")
         if not keep_model_loaded:self.__class__._clear_sessions()
-        return (result,)
+        return (result,info)
