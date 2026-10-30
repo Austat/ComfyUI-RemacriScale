@@ -82,10 +82,11 @@ With nVidia 5090 RTX, it took 5 minutes to build the engine for 1280 x 720 resol
 <br>
 Supported methods are:
 
-           "TensorrtExecutionProvider",
-            "CUDAExecutionProvider",
-            "ROCmExecutionProvider",
-            "CPUExecutionProvider"
+           "CPUExecutionProvider",
+           "CUDAExecutionProvider",
+           "MIGraphXExecutionProvider"
+           "ROCmExecutionProvider",
+           "TensorrtExecutionProvider"
 
 <details>
   <summary>Details about TensorRT timing cache and engine (aka tactic timing data)</summary>
