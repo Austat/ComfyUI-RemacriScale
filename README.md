@@ -58,6 +58,7 @@ Folder structure should be something like this:
 
 ```text
 
+ComfyUI-RemacriScale
 ├── assets/
 │   ├── cache.py
 │   ├── inference.py
